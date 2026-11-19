@@ -18,7 +18,7 @@ It mirrors rules_valkey's structure (launcher, trampoline, control endpoint), ru
 
 ```
 rules_clickhouse/
-├── MODULE.bazel              # module 0.1.0; clickhouse.version(26.9.32.8); register @clickhouse//:all; dev: rules_itest
+├── MODULE.bazel              # module 0.1.0; clickhouse.version(26.10.6.18); register @clickhouse//:all; dev: rules_itest
 ├── defs.bzl                  # public API re-exports
 ├── extensions.bzl            # clickhouse.version(name, version, release_tag, sha512, sha256, urls); root overrides by name
 ├── private/
@@ -76,7 +76,7 @@ Env: `CLICKHOUSE_HOST HTTP_PORT NATIVE_PORT NATIVE_ADDR DATABASE USER PASSWORD H
 ```sh
 bazel test //tests/...
 .github/consumer/check.sh /tmp/claude-1004/rc-consumer
-tools/update_versions.sh 26.9.32.8 26.10.6.18   # regenerate pins (downloads ~1.6 GB)
+tools/update_versions.sh 26.10.6.18 26.9.32.8   # regenerate pins (downloads ~1.6 GB)
 tools/update_versions.sh --check                # checksum files only
 ```
 
@@ -86,13 +86,13 @@ To find stray servers, use `pgrep -x clickhouse` (an exact process name). Never 
 
 ### Test results (last full run: 2026-11-18)
 
-All 34 test targets in `//tests/...` pass on Linux x86_64 (ClickHouse 26.9.32.8), 14 of them analysis tests. `parallel_test` runs 4 shards.
+All 34 test targets in `//tests/...` pass on Linux x86_64 (ClickHouse 26.10.6.18), 14 of them analysis tests. `parallel_test` runs 4 shards.
 - 5 runs each of 9 server tests in parallel (45 runs; `parallel_test`: 20 shard runs) passed with no stray servers. Startup under that load was 2.0–4.7 s (median 3.5 s), on a machine with a load average of about 60.
 - Alone, the server is ready in 1.0–1.3 s, and the env file appears 2.0–2.5 s after launch with 3 migrations.
 - A `/tmp` and runfiles probe file made `isolation_test` fail, as it should.
 - `.github/consumer/check.sh` (CI's `consumer` job) uses the commit's `git archive` as a dependency, and passed (2.5 min, cold for 26.10.6.18). It checks that:
-  - an untagged root runs a `clickhouse_test` on 26.9.32.8;
-  - a root `clickhouse.version(version = "26.10.6.18")` runs it on 26.10.6.18;
+  - an untagged root runs a `clickhouse_test` on 26.10.6.18;
+  - a root `clickhouse.version(version = "26.9.32.8")` runs it on 26.9.32.8;
   - a repeated tag resolves, while conflicting tags and an unpinned version fail clearly;
   - `@rules_clickhouse//...` loads.
 - `tools/update_versions.sh --check` passes, and fails on a hand-edited hash.
