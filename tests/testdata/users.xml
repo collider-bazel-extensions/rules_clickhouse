@@ -1,0 +1,24 @@
+<!-- A users fragment: a second user and a profile setting. The default
+     user's password and networks here are dropped (rules_clickhouse's). -->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_result_rows>100000</max_result_rows>
+        </default>
+        <readonly_profile>
+            <readonly>1</readonly>
+        </readonly_profile>
+    </profiles>
+    <users>
+        <default>
+            <password>not-the-real-one</password>
+            <networks><ip>::/0</ip></networks>
+        </default>
+        <reader>
+            <password>reader-pw</password>
+            <networks><ip>127.0.0.1</ip></networks>
+            <profile>readonly_profile</profile>
+            <quota>default</quota>
+        </reader>
+    </users>
+</clickhouse>

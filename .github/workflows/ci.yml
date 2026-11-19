@@ -1,0 +1,85 @@
+# Bzlmod-only.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  hermetic:
+    # The whole suite: analysis tests, the per-test server (functional,
+    # migrations, failures, restart, isolation, two servers, sharded
+    # parallel run, rules_itest) and the pins. Every test is tagged
+    # block-network, which needs the linux-sandbox; ClickHouse comes from
+    # the pinned release archive (about 250 MB, cached).
+    name: bazel test (ubuntu-latest, hermetic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-hermetic
+          repository-cache: true
+
+      # Ubuntu 24.04 restricts unprivileged user namespaces, which Bazel's
+      # linux-sandbox needs (and with it block-network). Without it Bazel
+      # falls back to a sandbox that can't block the network, and
+      # //tests:network_blocked_test fails.
+      - name: Allow the linux-sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Verify NO host clickhouse on PATH
+        run: |
+          if command -v clickhouse >/dev/null 2>&1 || command -v clickhouse-server >/dev/null 2>&1; then
+            echo "FAIL: a host ClickHouse is on PATH; the hermetic toolchain test would be meaningless" >&2
+            exit 1
+          fi
+
+      # `bazel build //...` would download every platform's binary (the
+      # toolchain targets in @clickhouse); target paths instead.
+      - name: bazel build
+        run: bazel build //:defs //:extensions //private/... //toolchain:current //tests/...
+
+      - name: bazel test
+        run: bazel test //tests/... --test_output=errors
+
+      - name: Pins match upstream's checksums
+        run: tools/update_versions.sh --check
+
+      - name: No ClickHouse processes left behind
+        if: always()
+        run: |
+          if pgrep -x clickhouse; then echo "FAIL: clickhouse processes left running" >&2; exit 1; fi
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-testlogs-hermetic
+          path: bazel-testlogs/
+          if-no-files-found: ignore
+
+  consumer:
+    # rules_clickhouse as a dependency, from the commit's release archive: a
+    # root without clickhouse.version() resolves and runs a clickhouse_test,
+    # a root override to another pinned version runs it, an unsupported
+    # version fails clearly, and @rules_clickhouse//... loads (tests/ and
+    # tools/ are export-ignore'd).
+    name: consumer (ubuntu-latest, git archive)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+
+      - name: Allow the linux-sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Consumer checks
+        run: .github/consumer/check.sh "$RUNNER_TEMP/consumer"

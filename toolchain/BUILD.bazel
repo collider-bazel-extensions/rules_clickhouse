@@ -1,0 +1,20 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+load(":toolchain.bzl", "current_clickhouse_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["toolchain.bzl"])
+
+# The toolchains themselves are generated into the hub repo (`@clickhouse`,
+# registered by MODULE.bazel), one per platform, by the `clickhouse`
+# extension.
+toolchain_type(name = "clickhouse")
+
+# The resolved binary for the target platform, usable as `data`.
+current_clickhouse_toolchain(name = "current")
+
+bzl_library(
+    name = "toolchain",
+    srcs = ["toolchain.bzl"],
+    deps = ["//private:providers"],
+)

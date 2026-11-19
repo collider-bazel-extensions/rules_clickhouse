@@ -1,0 +1,19 @@
+load("@rules_clickhouse//:defs.bzl", "clickhouse_schema")
+
+package(default_visibility = ["//tests:__subpackages__"])
+
+exports_files(glob(["**/*.sql", "*.csv", "*.xml"]))
+
+clickhouse_schema(
+    name = "schema",
+    srcs = glob(["migrations/*.sql"]),
+)
+
+# 001 is good; 002 fails at its second statement.
+clickhouse_schema(
+    name = "bad_schema",
+    srcs = [
+        "migrations/001_events.sql",
+        "bad_migrations/002_bad.sql",
+    ],
+)

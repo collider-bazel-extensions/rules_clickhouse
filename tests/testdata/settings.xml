@@ -1,0 +1,32 @@
+<!-- A config fragment as a production config would have it: host paths,
+     listeners and logging that rules_clickhouse overrides, and settings
+     that apply as written. -->
+<clickhouse>
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+    <logger>
+        <level>debug</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+    </logger>
+    <listen_host>::</listen_host>
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <mysql_port>9004</mysql_port>
+    <postgresql_port>9005</postgresql_port>
+    <interserver_http_port>9009</interserver_http_port>
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+    </prometheus>
+    <send_crash_reports><enabled>true</enabled></send_crash_reports>
+
+    <timezone>Europe/Berlin</timezone>
+    <display_name>rules-clickhouse-test</display_name>
+    <macros>
+        <shard>01</shard>
+    </macros>
+</clickhouse>

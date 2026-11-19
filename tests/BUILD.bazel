@@ -1,0 +1,398 @@
+"""In-tree tests for rules_clickhouse. Every test is tagged block-network:
+the sandbox gives it loopback only, so the server, the migrations and the
+clients all run offline (//tests:network_blocked_test checks the sandbox
+really blocks the network)."""
+
+load("@rules_itest//:itest.bzl", "itest_service", "service_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(
+    "@rules_clickhouse//:defs.bzl",
+    "clickhouse_health_check",
+    "clickhouse_server",
+    "clickhouse_test",
+)
+load(":analysis_tests.bzl", "analysis_test_suite")
+
+_NET = ["block-network"]
+
+_SCHEMA = "//tests/testdata:schema"
+
+_SEED = [
+    "//tests/testdata:seed.sql",
+    "//tests/testdata:events.csv",
+]
+
+# ---- the sandbox ------------------------------------------------------------------
+
+sh_test(
+    name = "network_blocked_test",
+    srcs = ["network_blocked_test.sh"],
+    tags = _NET,
+)
+
+# ---- clickhouse_test ----------------------------------------------------------------
+
+clickhouse_test(
+    name = "functional_test",
+    srcs = ["functional_test.sh"],
+    args = [
+        "one",
+        "'two words'",
+    ],
+    database = "analytics",
+    schema = _SCHEMA,
+    seed = _SEED,
+    tags = _NET,
+)
+
+clickhouse_test(
+    name = "password_test",
+    srcs = ["password_test.sh"],
+    password = "p@ss w&rd:/<x>",
+    tags = _NET,
+)
+
+clickhouse_test(
+    name = "config_test",
+    srcs = ["config_test.sh"],
+    args = ["$(rootpath :listeners.py)"],
+    config = ["//tests/testdata:settings.xml"],
+    data = [":listeners.py"],
+    extra_args = ["--max_concurrent_queries=42"],
+    tags = _NET,
+    users = ["//tests/testdata:users.xml"],
+)
+
+clickhouse_test(
+    name = "restart_test",
+    srcs = ["restart_test.sh"],
+    schema = _SCHEMA,
+    tags = _NET,
+)
+
+# Four shards at once, each with its own server.
+clickhouse_test(
+    name = "parallel_test",
+    srcs = ["parallel_test.sh"],
+    shard_count = 4,
+    tags = _NET,
+)
+
+# ---- clickhouse_server run directly -------------------------------------------------
+
+clickhouse_server(
+    name = "test_server",
+    extra_args = ["--max_concurrent_queries=7"],
+    schema = _SCHEMA,
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "server_test",
+    srcs = ["server_test.sh"],
+    args = ["$(rootpath :test_server)"],
+    data = [":test_server"],
+    tags = _NET,
+)
+
+clickhouse_health_check(
+    name = "test_server_health",
+    server = ":test_server",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "health_check_test",
+    srcs = ["health_check_test.sh"],
+    args = ["$(rootpath :test_server_health)"],
+    data = [":test_server_health"],
+    tags = _NET,
+)
+
+clickhouse_server(
+    name = "isolation_server",
+    config = ["//tests/testdata:settings.xml"],
+    schema = _SCHEMA,
+    seed = _SEED,
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "isolation_test",
+    srcs = ["isolation_test.sh"],
+    args = [
+        "$(rootpath :isolation_server)",
+        "$(rootpath :listeners.py)",
+    ],
+    data = [
+        ":isolation_server",
+        ":listeners.py",
+    ],
+    tags = _NET,
+)
+
+clickhouse_server(
+    name = "two_a",
+    database = "db_a",
+    tags = ["manual"],
+)
+
+clickhouse_server(
+    name = "two_b",
+    database = "db_b",
+    password = "b",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "two_servers_test",
+    srcs = ["two_servers_test.sh"],
+    args = [
+        "$(rootpath :two_a)",
+        "$(rootpath :two_b)",
+    ],
+    data = [
+        ":two_a",
+        ":two_b",
+    ],
+    tags = _NET,
+)
+
+# ---- failures: each must exit non-zero, name the cause, leave nothing running --------
+
+clickhouse_server(
+    name = "bad_migration_server",
+    schema = "//tests/testdata:bad_schema",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "bad_migration_test",
+    srcs = ["expect_failure.sh"],
+    args = [
+        "$(rootpath :bad_migration_server)",
+        "1",
+        "'applied migration 1/2: tests/testdata/migrations/001_events.sql'",
+        "'migration 2/2 tests/testdata/bad_migrations/002_bad.sql failed, line 4:'",
+        "'ALTER TABLE events ADD COLUMN value NoSuchType'",
+        "UNKNOWN_TYPE",
+    ],
+    data = [":bad_migration_server"],
+    tags = _NET,
+)
+
+clickhouse_server(
+    name = "bad_seed_server",
+    schema = _SCHEMA,
+    seed = ["//tests/testdata:bad_seed.sql"],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "bad_seed_test",
+    srcs = ["expect_failure.sh"],
+    args = [
+        "$(rootpath :bad_seed_server)",
+        "1",
+        "'seed tests/testdata/bad_seed.sql failed, line 1:'",
+        "UNKNOWN_TABLE",
+    ],
+    data = [":bad_seed_server"],
+    tags = _NET,
+)
+
+clickhouse_server(
+    name = "bad_config_server",
+    config = ["//tests/testdata:not_xml.xml"],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "bad_config_test",
+    srcs = ["expect_failure.sh"],
+    args = [
+        "$(rootpath :bad_config_server)",
+        "1",
+        "'config file tests/testdata/not_xml.xml is not valid XML'",
+    ],
+    data = [":bad_config_server"],
+    tags = _NET,
+)
+
+# A setting value the server itself refuses at start: its own error, from
+# its error log.
+clickhouse_server(
+    name = "bad_setting_server",
+    extra_args = ["--timezone=Not/AZone"],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "bad_setting_test",
+    srcs = ["expect_failure.sh"],
+    args = [
+        "$(rootpath :bad_setting_server)",
+        "1",
+        "'clickhouse server exited with status'",
+        "'before it was ready'",
+        "'(errors):'",
+        "Not/AZone",
+    ],
+    data = [":bad_setting_server"],
+    tags = _NET,
+)
+
+clickhouse_server(
+    name = "slow_server",
+    ready_timeout = "0.001",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "ready_timeout_test",
+    srcs = ["expect_failure.sh"],
+    args = [
+        "$(rootpath :slow_server)",
+        "1",
+        "'clickhouse server was not ready (GET /ping -> Ok.) within 0.001s'",
+    ],
+    data = [":slow_server"],
+    tags = _NET,
+)
+
+# A clickhouse_test whose migration fails never runs its body.
+clickhouse_test(
+    name = "failing_clickhouse_test",
+    srcs = ["never_runs.sh"],
+    schema = "//tests/testdata:bad_schema",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "failing_clickhouse_test_test",
+    srcs = ["expect_failure.sh"],
+    # The trampoline, run with the arguments its sh_test would pass (a test
+    # target's args don't apply when it is run as data).
+    args = [
+        "$(rootpath //private:clickhouse_test_trampoline.sh)",
+        "1",
+        "'clickhouse_test: ClickHouse server exited (status 1) before it was ready'",
+        "'002_bad.sql failed'",
+        "--",
+        "$(rootpath :failing_clickhouse_test_clickhouse)",
+        "$(rootpath :failing_clickhouse_test_inner)",
+        "failing_clickhouse_test_clickhouse",
+        "$(rootpath //private:testlib.sh)",
+    ],
+    data = [
+        ":failing_clickhouse_test_clickhouse",
+        ":failing_clickhouse_test_inner",
+        "//private:clickhouse_test_trampoline.sh",
+        "//private:testlib.sh",
+    ],
+    tags = _NET,
+)
+
+# ---- the trampoline: watching and cleanup ---------------------------------------------
+
+clickhouse_test(
+    name = "server_dies",
+    srcs = ["dies.sh"],
+    tags = ["manual"],
+)
+
+clickhouse_test(
+    name = "exit3",
+    srcs = ["exit3.sh"],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "server_died_test",
+    srcs = ["server_died_test.sh"],
+    args = [
+        "$(rootpath //private:clickhouse_test_trampoline.sh)",
+        "$(rootpath //private:testlib.sh)",
+        "$(rootpath :server_dies_clickhouse)",
+        "$(rootpath :server_dies_inner)",
+        "$(rootpath :exit3_clickhouse)",
+        "$(rootpath :exit3_inner)",
+    ],
+    data = [
+        ":exit3_clickhouse",
+        ":exit3_inner",
+        ":server_dies_clickhouse",
+        ":server_dies_inner",
+        "//private:clickhouse_test_trampoline.sh",
+        "//private:testlib.sh",
+    ],
+    tags = _NET,
+)
+
+clickhouse_test(
+    name = "record_port",
+    srcs = ["record_port.sh"],
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "server_cleanup_test",
+    srcs = ["server_cleanup_test.sh"],
+    args = [
+        "$(rootpath //private:clickhouse_test_trampoline.sh)",
+        "$(rootpath :record_port_clickhouse)",
+        "$(rootpath :record_port_inner)",
+        "$(rootpath //private:testlib.sh)",
+    ],
+    data = [
+        ":record_port_clickhouse",
+        ":record_port_inner",
+        "//private:clickhouse_test_trampoline.sh",
+        "//private:testlib.sh",
+    ],
+    tags = _NET,
+)
+
+# ---- rules_itest ---------------------------------------------------------------------
+
+clickhouse_server(
+    name = "itest_server",
+    schema = _SCHEMA,
+    tags = ["manual"],
+)
+
+clickhouse_health_check(
+    name = "itest_server_health",
+    server = ":itest_server",
+    tags = ["manual"],
+)
+
+itest_service(
+    name = "clickhouse_svc",
+    exe = ":itest_server",
+    health_check = ":itest_server_health",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "itest_test_bin",
+    srcs = ["itest_test.sh"],
+    tags = ["manual"],
+)
+
+service_test(
+    name = "itest_test",
+    services = [":clickhouse_svc"],
+    tags = _NET,
+    test = ":itest_test_bin",
+)
+
+# ---- pins ----------------------------------------------------------------------------
+
+sh_test(
+    name = "checksums_test",
+    srcs = ["checksums_test.sh"],
+    data = ["//private:versions.bzl"],
+)
+
+analysis_test_suite(name = "analysis_tests")

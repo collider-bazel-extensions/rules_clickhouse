@@ -1,0 +1,34 @@
+"""Private build files for rules_clickhouse. The public surface is
+//:defs.bzl, which re-exports from here."""
+
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "clickhouse_test_trampoline.sh",
+    "health_check.sh.tmpl",
+    "launcher.py",
+    "platforms.bzl",
+    "server.sh.tmpl",
+    "testlib.sh",
+    "versions.bzl",
+])
+
+bzl_library(name = "providers", srcs = ["providers.bzl"])
+
+bzl_library(name = "platforms", srcs = ["platforms.bzl"])
+
+bzl_library(name = "versions", srcs = ["versions.bzl"])
+
+bzl_library(
+    name = "repositories",
+    srcs = ["repositories.bzl"],
+    deps = [":platforms", ":versions"],
+)
+
+bzl_library(name = "schema", srcs = ["schema.bzl"], deps = [":providers"])
+
+bzl_library(name = "server", srcs = ["server.bzl"], deps = [":providers"])
+
+bzl_library(name = "test", srcs = ["test.bzl"], deps = [":server"])
