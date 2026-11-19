@@ -29,7 +29,7 @@ archive_override(
     module_name = "rules_clickhouse",
     urls = ["https://github.com/collider-bazel-extensions/rules_clickhouse/archive/refs/tags/v0.1.0.tar.gz"],
     strip_prefix = "rules_clickhouse-0.1.0",
-    integrity = "INTEGRITY_AFTER_TAG",
+    integrity = "sha256-fmKpkGUOsR0yAaa1Ah+6E8o8Rj+q5653muRQGxwCbqM=",
 )
 ```
 
