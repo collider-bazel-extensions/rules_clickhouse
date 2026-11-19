@@ -90,6 +90,12 @@ All 34 test targets in `//tests/...` pass on Linux x86_64 (ClickHouse 26.9.32.8)
 - 5 runs each of 9 server tests in parallel (45 runs; `parallel_test`: 20 shard runs) passed with no stray servers. Startup under that load was 2.0–4.7 s (median 3.5 s), on a machine with a load average of about 60.
 - Alone, the server is ready in 1.0–1.3 s, and the env file appears 2.0–2.5 s after launch with 3 migrations.
 - A `/tmp` and runfiles probe file made `isolation_test` fail, as it should.
+- `.github/consumer/check.sh` (CI's `consumer` job) uses the commit's `git archive` as a dependency, and passed (2.5 min, cold for 26.10.6.18). It checks that:
+  - an untagged root runs a `clickhouse_test` on 26.9.32.8;
+  - a root `clickhouse.version(version = "26.10.6.18")` runs it on 26.10.6.18;
+  - a repeated tag resolves, while conflicting tags and an unpinned version fail clearly;
+  - `@rules_clickhouse//...` loads.
+- `tools/update_versions.sh --check` passes, and fails on a hand-edited hash.
 
 ## Known limitations
 
